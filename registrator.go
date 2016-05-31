@@ -169,7 +169,7 @@ func main() {
 
 	// Process Docker events
 	for msg := range events {
-		log.Printf("docker: '%s', '%s'", msg.Status, msg.ID)
+		log.Printf("docker: '%s', '%s'", msg.Status, msg.ID[:12])
 		switch msg.Status {
 		case "start":
 			go b.Add(msg.ID)
