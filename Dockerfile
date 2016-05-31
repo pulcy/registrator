@@ -1,4 +1,4 @@
-FROM gliderlabs/alpine:3.2
+FROM gliderlabs/alpine:3.3
 ENTRYPOINT ["/bin/registrator"]
 
 COPY . /go/src/github.com/gliderlabs/registrator

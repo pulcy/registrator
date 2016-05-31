@@ -1,33 +1,67 @@
-NAME=registrator
-VERSION=$(shell cat VERSION)
-DEV_RUN_OPTS ?= consul:
+PROJECT := registrator
+SCRIPTDIR := $(shell pwd)
+ROOTDIR := $(shell cd $(SCRIPTDIR) && pwd)
+VERSION:= $(shell cat $(ROOTDIR)/VERSION)
+COMMIT := $(shell git rev-parse --short HEAD)
 
-dev:
-	docker build -f Dockerfile.dev -t $(NAME):dev .
-	docker run --rm \
-		-v /var/run/docker.sock:/tmp/docker.sock \
-		$(NAME):dev /bin/registrator $(DEV_RUN_OPTS)
+GOBUILDDIR := $(SCRIPTDIR)/.gobuild
+SRCDIR := $(SCRIPTDIR)
+BINDIR := $(ROOTDIR)
+VENDORDIR := $(ROOTDIR)/deps
 
-build:
-	mkdir -p build
-	docker build -t $(NAME):$(VERSION) .
-	docker save $(NAME):$(VERSION) | gzip -9 > build/$(NAME)_$(VERSION).tgz
+ORGPATH := github.com/gliderlabs
+ORGDIR := $(GOBUILDDIR)/src/$(ORGPATH)
+REPONAME := $(PROJECT)
+REPODIR := $(ORGDIR)/$(REPONAME)
+REPOPATH := $(ORGPATH)/$(REPONAME)
+BIN := $(BINDIR)/$(PROJECT)
 
-release:
-	rm -rf release && mkdir release
-	go get github.com/progrium/gh-release/...
-	cp build/* release
-	gh-release create gliderlabs/$(NAME) $(VERSION) \
-		$(shell git rev-parse --abbrev-ref HEAD) $(VERSION)
-	glu hubtag gliderlabs/$(NAME) $(VERSION)
+GOPATH := $(GOBUILDDIR)
+GOVERSION := 1.6.2-alpine
 
-docs:
-	boot2docker ssh "sync; sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'" || true
-	docker run --rm -it -p 8000:8000 -v $(PWD):/work gliderlabs/pagebuilder mkdocs serve
+ifndef GOOS
+	GOOS := linux
+endif
+ifndef GOARCH
+	GOARCH := amd64
+endif
 
-circleci:
-	rm -f ~/.gitconfig
-	go get -u github.com/gliderlabs/glu
-	glu circleci
+SOURCES := $(shell find $(SRCDIR) -name '*.go')
 
-.PHONY: build release docs
+.PHONY: all clean deps
+
+all: $(BIN)
+
+clean:
+	rm -Rf $(BIN) $(GOBUILDDIR) build
+
+deps:
+	@${MAKE} -B -s $(GOBUILDDIR)
+
+$(GOBUILDDIR):
+	@mkdir -p $(ORGDIR)
+	@rm -f $(REPODIR) && ln -s ../../../.. $(REPODIR)
+	@GOPATH=$(GOPATH) pulsar go flatten -V $(VENDORDIR)
+
+update-vendor:
+	@rm -Rf $(VENDORDIR)
+	@pulsar go vendor -V $(VENDORDIR) \
+		github.com/cenkalti/backoff \
+		github.com/coreos/go-etcd/etcd \
+		github.com/fsouza/go-dockerclient \
+		github.com/gliderlabs/pkg/usage \
+		github.com/hashicorp/consul/api \
+		github.com/samuel/go-zookeeper/zk \
+		gopkg.in/coreos/go-etcd.v0/etcd
+
+$(BIN): $(GOBUILDDIR) $(SOURCES)
+	docker run \
+		--rm \
+		-v $(ROOTDIR):/usr/code \
+		-e GOPATH=/usr/code/.gobuild \
+		-e GOOS=$(GOOS) \
+		-e GOARCH=$(GOARCH) \
+		-e CGO_ENABLED=0 \
+		-w /usr/code/ \
+		golang:$(GOVERSION) \
+		go build -a -installsuffix netgo -tags netgo -ldflags "-X main.projectVersion=$(VERSION) -X main.projectBuild=$(COMMIT)" -o /usr/code/$(PROJECT) $(REPOPATH)

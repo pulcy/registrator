@@ -140,8 +140,10 @@ func main() {
 			for {
 				select {
 				case <-ticker.C:
+					log.Println("refreshing...")
 					b.Refresh()
 				case <-quit:
+					log.Println("stopping refresh timer")
 					ticker.Stop()
 					return
 				}
@@ -167,6 +169,7 @@ func main() {
 
 	// Process Docker events
 	for msg := range events {
+		log.Printf("docker: '%s', '%s'", msg.Status, msg.ID)
 		switch msg.Status {
 		case "start":
 			go b.Add(msg.ID)
