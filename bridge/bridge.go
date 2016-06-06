@@ -75,14 +75,15 @@ func (b *Bridge) Refresh() {
 		}
 	}
 
-	for containerId, services := range b.services {
+	for _, services := range b.services {
 		for _, service := range services {
 			err := b.registry.Refresh(service)
 			if err != nil {
 				log.Println("refresh failed:", service.ID, err)
 				continue
 			}
-			log.Println("refreshed:", containerId[:12], service.ID)
+			//log.Println("refreshed:", containerId[:12], service.ID)
+			// TODO support metrics so we can cont this easily
 		}
 	}
 }
